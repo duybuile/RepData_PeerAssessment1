@@ -1,25 +1,137 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+output: html_document
+keep_md: true
 ---
 
 
-## Loading and preprocessing the data
+###Loading and preprocessing the data
+```{r}
+dat <- read.csv(file = "activity.csv", header = TRUE, sep = ",")
+head(dat, 5)
+```
 
 
+###What is mean total number of steps taken per day?
+We know that the data captures every 5 min. Therefore, in a day, there are 24*12 time intervals. Also, data was collected from 2012/10/01 to 2012/11/30, thus there will be 61 days.
+```{r}
+#Create a new data
+days <- seq(from=as.Date('2012-10-01'), to=as.Date("2012-11-30"),by='days' )
 
-## What is mean total number of steps taken per day?
+totalStep <- function(data){
+  ndays = length(days)
+  totStep <- numeric(ndays)
+  for( i in seq_along(days)){
+    sub = subset(data, as.Date(data$date) == days[i])
+    totStep[i] <- sum(sub$steps, na.rm = TRUE)
+  }
+  return(totStep)
+}
+
+newdat <- data.frame(days = days, total.Steps = totalStep(dat))
+#Plot the histogram
+hist(newdat$total.Steps, col = "lightblue", 
+    main = "Histogram of total steps per day in two months",
+    xlab = "Total steps per day")
+
+#Calculate meanStep and medianStep
+mean(newdat$total.Steps)
+median(newdat$total.Steps)
+```
 
 
+###What is the average daily activity pattern?
+Time-series of the 5 minutes interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r}
+#number of intervals per day
+ninterval = 24*12
+interval <- dat[1:ninterval,]$interval
+#average number of steps taken per interval across all days
 
-## What is the average daily activity pattern?
+#Calculate mean Interval
+meanInterval <- function(data){
+  meanInterval <- numeric(ninterval) 
+  for( i in 1:length(interval)){
+    sub = subset(data, data$interval == interval[i])
+    meanInterval[i] = mean(sub$steps, na.rm = TRUE)
+  }
+  return(meanInterval)
+}
 
+#plot  
+plot(x = interval, y = meanInterval(dat), type = "l", 
+     main="Time series of 5 minutes interval",
+     xlab = "Interval", ylab = "Averaged steps across all days",
+     col = "blue")
+#Show the interval containing the maximum number of steps  
+interval[which.max(meanInterval(dat))]
+#maximum number of steps at that interval
+print(max(meanInterval(dat)))
+```
 
+The result shows that 8:35 is the peak time of the day with around 206 steps in average.
 
-## Imputing missing values
+###Imputing missing values
+There are many ways to impute the data. We could easily use some libraries, such as "Amelia" or "VIM" to perform automatic imputation. However, manual imputation is done herein as the problem requires to insert specific values into the missings.
 
+```{r}
+#total number of missing values
+sum(is.na(x = dat))
 
+#Fill in missing values
+fillMissing <- function(data){
+  temMean <- meanInterval(data)
+  naIndex <- which(is.na(data) == TRUE)
+  for (i in 1:length(naIndex)){  
+    for( j in 1:ninterval){  
+      if(data[naIndex[i],]$interval == interval[j]){
+        data[naIndex[i],]$steps <- temMean[j]
+      }
+    }
+  }
+  return(data)
+}
 
-## Are there differences in activity patterns between weekdays and weekends?
+imputedat <- fillMissing(dat)
+newdat <- data.frame(days = days, total.Steps = totalStep(imputedat))
+#Plot the histogram
+hist(newdat$total.Steps, col = "red", 
+    main = "Histogram of total steps per day in two months",
+    xlab = "Total steps per day")
+
+#Calculate meanStep and medianStep
+mean(newdat$total.Steps)
+median(newdat$total.Steps)
+```
+The histogram becomes slightly different. The most significance on the chart is still at around 10,000 to 15,000 steps. However, the proportion of 0-5000 steps decrease considerably. 
+
+Also, the mean and median of the new imputted data are equal, suggesting a better dataset.
+
+###Are there differences in activity patterns between weekdays and weekends?
+```{r}
+library(lubridate)
+convert <- function(date){
+  
+  if(wday(as.Date(date)) %in% 2:6){return ("weekday")}
+  else {return ("weekend")}
+}
+
+imputedat$weektime <- do.call(rbind, lapply(imputedat$date, FUN = convert))
+
+wdaydat <- subset(imputedat, imputedat$weektime == "weekday")
+wkendat <- subset(imputedat, imputedat$weektime == "weekend")
+
+par(mfrow = c( 2, 1 ))
+#plot  
+plot(x = interval, y = meanInterval(wdaydat), type = "l", 
+     main="Weekday",
+     xlab = "Interval", ylab = "Averaged steps across all days",
+     col = "blue")
+plot(x = interval, y = meanInterval(wkendat), type = "l", 
+     main="Weekend",
+     xlab = "Interval", ylab = "Averaged steps across all days",
+     col = "blue")
+
+```
+
+The figures show that step numbers taken during weekends fluctuate more wildly than those taken during weekdays.As can be seen, it is quite obvious that weekend activities are busier during the day than weekdays'.Having said that, both reach a peak at around 8:00 to 9:00, which witness the busiest time of the day.
